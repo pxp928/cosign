@@ -45,9 +45,9 @@ func VerifyBlobAttestationCmd(ctx context.Context, ko options.KeyOpts, certRef, 
 		return &options.PubKeyParseError{}
 	}
 
-	targetSig := []byte(sigRef)
-	sig := string(targetSig)
-	b64sig := base64.StdEncoding.EncodeToString(targetSig)
+	//targetSig := []byte(sigRef)
+	//sig := string(targetSig)
+	//b64sig := base64.StdEncoding.EncodeToString(targetSig)
 	//sig, b64sig, err := signatures(sigRef, ko.BundlePath)
 	//if err != nil {
 	//	return err
@@ -143,5 +143,5 @@ func VerifyBlobAttestationCmd(ctx context.Context, ko options.KeyOpts, certRef, 
 	if len(uuids) == 0 {
 		return errors.New("could not find a tlog entry for provided blob")
 	}
-	return verifyAttestionByUUID(ctx, ko, rClient, certEmail, certOidcIssuer, sig, b64sig, uuids, blobBytes, enforceSCT, verifier)
+	return verifyAttestionByUUID(ctx, ko, rClient, certEmail, certOidcIssuer, uuids, blobBytes, enforceSCT, verifier)
 }

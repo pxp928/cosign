@@ -259,21 +259,18 @@ func TestAttestVerify(t *testing.T) {
 }
 
 func TestAttestBlobVerify(t *testing.T) {
-
+	defer setenv(t, options.ExperimentalEnv, "1")()
 	td := t.TempDir()
 
 	_, privKeyPath, pubKeyPath := keypair(t, td)
 
 	ctx := context.Background()
 
-	// Verify should fail at first
-	verifyAttestation := cliverify.VerifyAttestationCommand{
-		KeyRef: pubKeyPath,
+	blob := `hello world blob`
+	blobPath := filepath.Join(td, "hello_blob")
+	if err := os.WriteFile(blobPath, []byte(blob), 0600); err != nil {
+		t.Fatal(err)
 	}
-
-	// Fail case when using without type and policy flag
-	mustErr(verifyAttestation.Exec(ctx, []string{imgName}), t)
-
 	slsaAttestation := `{ "buildType": "x", "builder": { "id": "2" }, "recipe": {} }`
 	slsaAttestationPath := filepath.Join(td, "attestation.slsa.json")
 	if err := os.WriteFile(slsaAttestationPath, []byte(slsaAttestation), 0600); err != nil {
@@ -281,30 +278,11 @@ func TestAttestBlobVerify(t *testing.T) {
 	}
 
 	// Now attest the image
-	ko := options.KeyOpts{KeyRef: privKeyPath, PassFunc: passFunc}
-	must(attest.AttestBlobCmd(ctx, ko, options.RegistryOptions{}, imgName, "", "", false, slsaAttestationPath, false,
-		"slsaprovenance", false, 30*time.Second), t)
+	ko := options.KeyOpts{KeyRef: privKeyPath, PassFunc: passFunc, RekorURL: options.DefaultRekorURL}
+	must(attest.AttestBlobCmd(ctx, ko, blobPath, "", "", "", false, slsaAttestationPath, "slsaprovenance", 30*time.Second), t)
 
-	// Use cue to verify attestation
-	policyPath := filepath.Join(td, "policy.cue")
-	verifyAttestation.PredicateType = "slsaprovenance"
-	verifyAttestation.Policies = []string{policyPath}
-
-	// Fail case
-	cuePolicy := `builder: id: "1"`
-	if err := os.WriteFile(policyPath, []byte(cuePolicy), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	// Success case
-	cuePolicy = `builder: id: "2"`
-	if err := os.WriteFile(policyPath, []byte(cuePolicy), 0600); err != nil {
-		t.Fatal(err)
-	}
-	must(verifyAttestation.Exec(ctx, []string{imgName}), t)
-
-	// Look for a specific annotation
-	mustErr(verify(pubKeyPath, imgName, true, map[string]interface{}{"foo": "bar"}, ""), t)
+	ko = options.KeyOpts{KeyRef: pubKeyPath, PassFunc: passFunc, RekorURL: options.DefaultRekorURL}
+	must(cliverify.VerifyBlobAttestationCmd(ctx, ko, "", "", "", "", "", blobPath, false), t)
 }
 
 func TestAttestationReplace(t *testing.T) {

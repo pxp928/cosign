@@ -343,7 +343,7 @@ func loadCertChainFromFileOrURL(path string) ([]*x509.Certificate, error) {
 	return certs, nil
 }
 
-func verifyAttestionByUUID(ctx context.Context, ko options.KeyOpts, rClient *client.Rekor, certEmail, certOidcIssuer, sig, b64sig string,
+func verifyAttestionByUUID(ctx context.Context, ko options.KeyOpts, rClient *client.Rekor, certEmail, certOidcIssuer string,
 	uuids []string, blobBytes []byte, enforceSCT bool, verifier signature.Verifier) error {
 	var validSigExists bool
 
@@ -358,7 +358,7 @@ func verifyAttestionByUUID(ctx context.Context, ko options.KeyOpts, rClient *cli
 			continue
 		}
 
-		if tlogEntry.Attestation == nil {
+		if tlogEntry.Attestation.Data == nil {
 			continue
 		}
 
