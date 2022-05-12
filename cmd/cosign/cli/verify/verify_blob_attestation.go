@@ -16,7 +16,6 @@
 package verify
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	_ "crypto/sha256" // for `crypto.SHA256`
@@ -37,24 +36,15 @@ import (
 	"github.com/sigstore/sigstore/pkg/signature/dsse"
 )
 
-func isb64(data []byte) bool {
-	_, err := base64.StdEncoding.DecodeString(string(data))
-	return err == nil
-}
-
 // nolint
-func VerifyBlobCmd(ctx context.Context, ko options.KeyOpts, certRef, certEmail,
-	certOidcIssuer, certChain, sigRef, blobRef string, enforceSCT bool) error {
+func VerifyBlobAttestationCmd(ctx context.Context, ko options.KeyOpts, certRef, certEmail,
+	certOidcIssuer, certChain, blobRef string, enforceSCT bool) error {
+
 	var verifier signature.Verifier
 	var cert *x509.Certificate
 
 	if !options.OneOf(ko.KeyRef, ko.Sk, certRef) && !options.EnableExperimental() && ko.BundlePath == "" {
 		return &options.PubKeyParseError{}
-	}
-
-	sig, b64sig, err := signatures(sigRef, ko.BundlePath)
-	if err != nil {
-		return err
 	}
 
 	blobBytes, err := payloadBytes(blobRef)
@@ -152,11 +142,6 @@ func VerifyBlobCmd(ctx context.Context, ko options.KeyOpts, certRef, certEmail,
 	// Use the DSSE verifier if the payload is a DSSE with the In-Toto format.
 	if isIntotoDSSE(blobBytes) {
 		verifier = dsse.WrapVerifier(verifier)
-	}
-
-	// verify the signature
-	if err := verifier.VerifySignature(bytes.NewReader([]byte(sig)), bytes.NewReader(blobBytes)); err != nil {
-		return err
 	}
 
 	// verify the rekor entry
