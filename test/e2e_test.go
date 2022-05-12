@@ -258,6 +258,55 @@ func TestAttestVerify(t *testing.T) {
 	mustErr(verify(pubKeyPath, imgName, true, map[string]interface{}{"foo": "bar"}, ""), t)
 }
 
+func TestAttestBlobVerify(t *testing.T) {
+
+	td := t.TempDir()
+
+	_, privKeyPath, pubKeyPath := keypair(t, td)
+
+	ctx := context.Background()
+
+	// Verify should fail at first
+	verifyAttestation := cliverify.VerifyAttestationCommand{
+		KeyRef: pubKeyPath,
+	}
+
+	// Fail case when using without type and policy flag
+	mustErr(verifyAttestation.Exec(ctx, []string{imgName}), t)
+
+	slsaAttestation := `{ "buildType": "x", "builder": { "id": "2" }, "recipe": {} }`
+	slsaAttestationPath := filepath.Join(td, "attestation.slsa.json")
+	if err := os.WriteFile(slsaAttestationPath, []byte(slsaAttestation), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now attest the image
+	ko := options.KeyOpts{KeyRef: privKeyPath, PassFunc: passFunc}
+	must(attest.AttestBlobCmd(ctx, ko, options.RegistryOptions{}, imgName, "", "", false, slsaAttestationPath, false,
+		"slsaprovenance", false, 30*time.Second), t)
+
+	// Use cue to verify attestation
+	policyPath := filepath.Join(td, "policy.cue")
+	verifyAttestation.PredicateType = "slsaprovenance"
+	verifyAttestation.Policies = []string{policyPath}
+
+	// Fail case
+	cuePolicy := `builder: id: "1"`
+	if err := os.WriteFile(policyPath, []byte(cuePolicy), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Success case
+	cuePolicy = `builder: id: "2"`
+	if err := os.WriteFile(policyPath, []byte(cuePolicy), 0600); err != nil {
+		t.Fatal(err)
+	}
+	must(verifyAttestation.Exec(ctx, []string{imgName}), t)
+
+	// Look for a specific annotation
+	mustErr(verify(pubKeyPath, imgName, true, map[string]interface{}{"foo": "bar"}, ""), t)
+}
+
 func TestAttestationReplace(t *testing.T) {
 	// This test is currently failing, see https://github.com/sigstore/cosign/issues/1378
 	// The replace option for attest does not appear to work on random.Image() generated images

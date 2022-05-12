@@ -111,5 +111,6 @@ func AttestBlobCmd(ctx context.Context, ko options.KeyOpts, artifactPath string,
 			return err
 		}
 	}
+	fmt.Println(string(signedPayload))
 	return err
 }

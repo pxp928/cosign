@@ -16,14 +16,12 @@
 package verify
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	_ "crypto/sha256" // for `crypto.SHA256`
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"os"
 
 	"github.com/pkg/errors"
 	"github.com/sigstore/cosign/cmd/cosign/cli/options"
@@ -34,17 +32,12 @@ import (
 	sigs "github.com/sigstore/cosign/pkg/signature"
 
 	"github.com/sigstore/sigstore/pkg/signature"
-	"github.com/sigstore/sigstore/pkg/signature/dsse"
 )
 
-func isb64(data []byte) bool {
-	_, err := base64.StdEncoding.DecodeString(string(data))
-	return err == nil
-}
-
 // nolint
-func VerifyBlobCmd(ctx context.Context, ko options.KeyOpts, certRef, certEmail,
+func VerifyBlobAttestationCmd(ctx context.Context, ko options.KeyOpts, certRef, certEmail,
 	certOidcIssuer, certChain, sigRef, blobRef string, enforceSCT bool) error {
+
 	var verifier signature.Verifier
 	var cert *x509.Certificate
 
@@ -52,10 +45,13 @@ func VerifyBlobCmd(ctx context.Context, ko options.KeyOpts, certRef, certEmail,
 		return &options.PubKeyParseError{}
 	}
 
-	sig, b64sig, err := signatures(sigRef, ko.BundlePath)
-	if err != nil {
-		return err
-	}
+	targetSig := []byte(sigRef)
+	sig := string(targetSig)
+	b64sig := base64.StdEncoding.EncodeToString(targetSig)
+	//sig, b64sig, err := signatures(sigRef, ko.BundlePath)
+	//if err != nil {
+	//	return err
+	//}
 
 	blobBytes, err := payloadBytes(blobRef)
 	if err != nil {
@@ -88,16 +84,7 @@ func VerifyBlobCmd(ctx context.Context, ko options.KeyOpts, certRef, certEmail,
 		if err != nil {
 			return err
 		}
-		co := &cosign.CheckOpts{
-			CertEmail:      certEmail,
-			CertOidcIssuer: certOidcIssuer,
-			EnforceSCT:     enforceSCT,
-		}
 		if certChain == "" {
-			err = cosign.CheckCertificatePolicy(cert, co)
-			if err != nil {
-				return err
-			}
 			verifier, err = signature.LoadVerifier(cert.PublicKey, crypto.SHA256)
 			if err != nil {
 				return err
@@ -107,6 +94,11 @@ func VerifyBlobCmd(ctx context.Context, ko options.KeyOpts, certRef, certEmail,
 			chain, err := loadCertChainFromFileOrURL(certChain)
 			if err != nil {
 				return err
+			}
+			co := &cosign.CheckOpts{
+				CertEmail:      certEmail,
+				CertOidcIssuer: certOidcIssuer,
+				EnforceSCT:     enforceSCT,
 			}
 			verifier, err = cosign.ValidateAndUnpackCertWithChain(cert, chain, co)
 			if err != nil {
@@ -136,38 +128,20 @@ func VerifyBlobCmd(ctx context.Context, ko options.KeyOpts, certRef, certEmail,
 		if err != nil {
 			return err
 		}
-	case options.EnableExperimental():
-		rClient, err := rekor.NewClient(ko.RekorURL)
-		if err != nil {
-			return err
-		}
-
-		uuids, err := cosign.FindTLogEntriesByPayload(ctx, rClient, blobBytes)
-		if err != nil {
-			return err
-		}
-
-		if len(uuids) == 0 {
-			return errors.New("could not find a tlog entry for provided blob")
-		}
-		return verifySigByUUID(ctx, ko, rClient, certEmail, certOidcIssuer, sig, b64sig, uuids, blobBytes, enforceSCT)
 	}
 
-	// Use the DSSE verifier if the payload is a DSSE with the In-Toto format.
-	if isIntotoDSSE(blobBytes) {
-		verifier = dsse.WrapVerifier(verifier)
-	}
-
-	// verify the signature
-	if err := verifier.VerifySignature(bytes.NewReader([]byte(sig)), bytes.NewReader(blobBytes)); err != nil {
+	rClient, err := rekor.NewClient(ko.RekorURL)
+	if err != nil {
 		return err
 	}
 
-	// verify the rekor entry
-	if err := verifyRekorEntry(ctx, ko, nil, verifier, cert, b64sig, blobBytes); err != nil {
+	uuids, err := cosign.FindTLogEntriesByPayload(ctx, rClient, blobBytes)
+	if err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stderr, "Verified OK")
-	return nil
+	if len(uuids) == 0 {
+		return errors.New("could not find a tlog entry for provided blob")
+	}
+	return verifyAttestionByUUID(ctx, ko, rClient, certEmail, certOidcIssuer, sig, b64sig, uuids, blobBytes, enforceSCT, verifier)
 }
