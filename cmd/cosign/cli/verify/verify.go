@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-openapi/runtime"
@@ -40,10 +41,13 @@ import (
 	"github.com/sigstore/cosign/cmd/cosign/cli/sign"
 	"github.com/sigstore/cosign/pkg/blob"
 	"github.com/sigstore/cosign/pkg/cosign"
+	"github.com/sigstore/cosign/pkg/cosign/cue"
 	"github.com/sigstore/cosign/pkg/cosign/pivkey"
 	"github.com/sigstore/cosign/pkg/cosign/pkcs11key"
+	"github.com/sigstore/cosign/pkg/cosign/rego"
 	"github.com/sigstore/cosign/pkg/cosign/tuf"
 	"github.com/sigstore/cosign/pkg/oci"
+	"github.com/sigstore/cosign/pkg/policy"
 	sigs "github.com/sigstore/cosign/pkg/signature"
 	ctypes "github.com/sigstore/cosign/pkg/types"
 	"github.com/sigstore/rekor/pkg/generated/client"
@@ -344,7 +348,7 @@ func loadCertChainFromFileOrURL(path string) ([]*x509.Certificate, error) {
 }
 
 func verifyAttestionByUUID(ctx context.Context, ko options.KeyOpts, rClient *client.Rekor, certEmail, certOidcIssuer string,
-	uuids []string, blobBytes []byte, enforceSCT bool, verifier signature.Verifier) error {
+	uuids []string, blobBytes []byte, enforceSCT bool, verifier signature.Verifier, predicateType string, policies []string) error {
 	var validSigExists bool
 
 	rekorClient, err := rekor.NewClient(ko.RekorURL)
@@ -371,6 +375,11 @@ func verifyAttestionByUUID(ctx context.Context, ko options.KeyOpts, rClient *cli
 			continue
 		}
 
+		err = verifyAttestationByPolicy(ctx, tlogEntry, predicateType, policies)
+		if err != nil {
+			return err
+		}
+
 		fmt.Fprintf(os.Stderr, "tlog entry verified with uuid: %s index: %d\n", hex.EncodeToString(uuid), *tlogEntry.Verification.InclusionProof.LogIndex)
 		validSigExists = true
 	}
@@ -383,6 +392,63 @@ We recommend requesting the certificate/signature from the original signer of th
 		return fmt.Errorf("could not find a valid tlog entry for provided blob, found %d invalid entries", len(uuids))
 	}
 	fmt.Fprintln(os.Stderr, "Verified OK")
+	return nil
+}
+
+func verifyAttestationByPolicy(ctx context.Context, tlogEntry *models.LogEntryAnon, predicateType string, policies []string) error {
+	var cuePolicies, regoPolicies []string
+
+	for _, policy := range policies {
+		switch filepath.Ext(policy) {
+		case ".rego":
+			regoPolicies = append(regoPolicies, policy)
+		case ".cue":
+			cuePolicies = append(cuePolicies, policy)
+		default:
+			return errors.New("invalid policy format, expected .cue or .rego")
+		}
+	}
+
+	dataString := tlogEntry.Attestation.Data.String()
+	p, err := base64.StdEncoding.DecodeString(dataString)
+	if err != nil {
+		return errors.Wrap(err, "getting payload")
+	}
+	str2 := string(p)
+	attestString, err := base64.StdEncoding.DecodeString(str2)
+	if err != nil {
+		return errors.Wrap(err, "getting payload")
+	}
+
+	var validationErrors []error
+	payload, err := policy.AttestationToPayloadJSON(ctx, predicateType, nil, attestString)
+	if err != nil {
+		return errors.Wrap(err, "converting to consumable policy validation")
+	}
+
+	if len(cuePolicies) > 0 {
+		fmt.Fprintf(os.Stderr, "will be validating against CUE policies: %v\n", cuePolicies)
+		cueValidationErr := cue.ValidateJSON(payload, cuePolicies)
+		if cueValidationErr != nil {
+			validationErrors = append(validationErrors, cueValidationErr)
+		}
+	}
+
+	if len(regoPolicies) > 0 {
+		fmt.Fprintf(os.Stderr, "will be validating against Rego policies: %v\n", regoPolicies)
+		regoValidationErrs := rego.ValidateJSON(payload, regoPolicies)
+		if len(regoValidationErrs) > 0 {
+			validationErrors = append(validationErrors, regoValidationErrs...)
+		}
+	}
+
+	if len(validationErrors) > 0 {
+		fmt.Fprintf(os.Stderr, "There are %d number of errors occurred during the validation:\n", len(validationErrors))
+		for _, v := range validationErrors {
+			_, _ = fmt.Fprintf(os.Stderr, "- %v\n", v)
+		}
+		return fmt.Errorf("%d validation errors occurred", len(validationErrors))
+	}
 	return nil
 }
 

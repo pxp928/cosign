@@ -187,7 +187,8 @@ func (c *VerifyAttestationCommand) Exec(ctx context.Context, images []string) (e
 
 		var validationErrors []error
 		for _, vp := range verified {
-			payload, err := policy.AttestationToPayloadJSON(ctx, c.PredicateType, vp)
+
+			payload, err := policy.AttestationToPayloadJSON(ctx, c.PredicateType, vp, nil)
 			if err != nil {
 				return errors.Wrap(err, "converting to consumable policy validation")
 			}

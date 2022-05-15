@@ -530,7 +530,7 @@ func ValidatePolicyAttestationsForAuthority(ctx context.Context, ref name.Refere
 		// There's a particular type, so we need to go through all the verified
 		// attestations and make sure that our particular one is satisfied.
 		for _, va := range verifiedAttestations {
-			attBytes, err := policy.AttestationToPayloadJSON(ctx, wantedAttestation.PredicateType, va)
+			attBytes, err := policy.AttestationToPayloadJSON(ctx, wantedAttestation.PredicateType, va, nil)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to convert attestation payload to json")
 			}

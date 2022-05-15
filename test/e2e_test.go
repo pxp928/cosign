@@ -266,6 +266,7 @@ func TestAttestBlobVerify(t *testing.T) {
 
 	ctx := context.Background()
 
+	policies := []string{}
 	blob := `hello world blob`
 	blobPath := filepath.Join(td, "hello_blob")
 	if err := os.WriteFile(blobPath, []byte(blob), 0600); err != nil {
@@ -281,8 +282,27 @@ func TestAttestBlobVerify(t *testing.T) {
 	ko := options.KeyOpts{KeyRef: privKeyPath, PassFunc: passFunc, RekorURL: options.DefaultRekorURL}
 	must(attest.AttestBlobCmd(ctx, ko, blobPath, "", "", "", false, slsaAttestationPath, "slsaprovenance", 30*time.Second), t)
 
+	// Use cue to verify attestation
+	policyPath := filepath.Join(td, "policy.cue")
+	policies = []string{policyPath}
+
+	// Fail case
+	cuePolicy := `builder: id: "1"`
+	if err := os.WriteFile(policyPath, []byte(cuePolicy), 0600); err != nil {
+		t.Fatal(err)
+	}
+
 	ko = options.KeyOpts{KeyRef: pubKeyPath, PassFunc: passFunc, RekorURL: options.DefaultRekorURL}
-	must(cliverify.VerifyBlobAttestationCmd(ctx, ko, "", "", "", "", "", blobPath, false), t)
+	mustErr(cliverify.VerifyBlobAttestationCmd(ctx, ko, "", "", "", "", blobPath, "slsaprovenance", false, policies), t)
+
+	// Success case
+	cuePolicy = `builder: id: "2"`
+	if err := os.WriteFile(policyPath, []byte(cuePolicy), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	ko = options.KeyOpts{KeyRef: pubKeyPath, PassFunc: passFunc, RekorURL: options.DefaultRekorURL}
+	must(cliverify.VerifyBlobAttestationCmd(ctx, ko, "", "", "", "", blobPath, "slsaprovenance", false, policies), t)
 }
 
 func TestAttestationReplace(t *testing.T) {

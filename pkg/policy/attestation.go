@@ -38,7 +38,7 @@ import (
 //
 // If there's no error, and payload is empty means the predicateType did not
 // match the attestation.
-func AttestationToPayloadJSON(ctx context.Context, predicateType string, verifiedAttestation oci.Signature) ([]byte, error) {
+func AttestationToPayloadJSON(ctx context.Context, predicateType string, verifiedAttestation oci.Signature, verifiedPayload []byte) ([]byte, error) {
 	// Check the predicate up front, no point in wasting time if it's invalid.
 	predicateURI, ok := options.PredicateTypeMap[predicateType]
 	if !ok {
@@ -46,25 +46,30 @@ func AttestationToPayloadJSON(ctx context.Context, predicateType string, verifie
 	}
 
 	var payloadData map[string]interface{}
-
-	p, err := verifiedAttestation.Payload()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting payload")
-	}
-
-	err = json.Unmarshal(p, &payloadData)
-	if err != nil {
-		return nil, errors.Wrap(err, "unmarshaling payload data")
-	}
-
+	var p []byte
+	var err error
 	var decodedPayload []byte
-	if val, ok := payloadData["payload"]; ok {
-		decodedPayload, err = base64.StdEncoding.DecodeString(val.(string))
-		if err != nil {
-			return nil, errors.Wrap(err, "decoding payload")
-		}
+	if verifiedPayload != nil {
+		decodedPayload = verifiedPayload
 	} else {
-		return nil, fmt.Errorf("could not find payload in payload data")
+		p, err = verifiedAttestation.Payload()
+		if err != nil {
+			return nil, errors.Wrap(err, "getting payload")
+		}
+
+		err = json.Unmarshal(p, &payloadData)
+		if err != nil {
+			return nil, errors.Wrap(err, "unmarshaling payload data")
+		}
+
+		if val, ok := payloadData["payload"]; ok {
+			decodedPayload, err = base64.StdEncoding.DecodeString(val.(string))
+			if err != nil {
+				return nil, errors.Wrap(err, "decoding payload")
+			}
+		} else {
+			return nil, fmt.Errorf("could not find payload in payload data")
+		}
 	}
 
 	// Only apply the policy against the requested predicate type

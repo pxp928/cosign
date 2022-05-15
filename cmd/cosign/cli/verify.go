@@ -269,7 +269,7 @@ The blob may be specified as a path to a file or - for stdin.`,
 }
 
 func VerifyBlobAttestation() *cobra.Command {
-	o := &options.VerifyBlobOptions{}
+	o := &options.VerifyBlobAttestationOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "verify-blob-attestation",
@@ -277,43 +277,44 @@ func VerifyBlobAttestation() *cobra.Command {
 		Long: `Verify an attestation on the blob by checking the claims
 		against the transparency log. The signature may be specified as a path to a file or a base64 encoded string.
 		The blob may be specified as a path to a file or - for stdin.`,
-		Example: `  cosign verify-blob-attestation (--key <key path>|<key url>|<kms uri>)|(--cert <cert>) --signature <sig> <blob>
+		Example: `  cosign verify-blob-attestation (--key <key path>|<key url>|<kms uri>)|(--cert <cert>) <blob>
 
   # Verify a simple blob and message
-  cosign verify-blob --key cosign.pub --signature sig msg
+  cosign verify-blob-attestation --key cosign.pub <blob>
 
-  # Verify a simple blob with remote signature URL, both http and https schemes are supported
-  cosign verify-blob --key cosign.pub --signature http://host/my.sig
+  # verify a blob attestation with public key provided by URL
+  cosign verify-blob-attestation --key https://host.for/<FILE> <blob>
 
-  # Verify a signature from an environment variable
-  cosign verify-blob --key cosign.pub --signature $sig msg
+  # Verify a blob attestation against a payload from another process using process redirection
+  cosign verify-blob-attestation --key cosign.pub <(git rev-parse HEAD)
 
-  # verify a signature with public key provided by URL
-  cosign verify-blob --key https://host.for/<FILE> --signature $sig msg
+  # Verify a blob attestation against Azure Key Vault
+  cosign verify-blob-attestation --key azurekms://[VAULT_NAME][VAULT_URI]/[KEY] <blob>
 
-  # Verify a signature against a payload from another process using process redirection
-  cosign verify-blob --key cosign.pub --signature $sig <(git rev-parse HEAD)
+  # Verify a blob attestation against AWS KMS
+  cosign verify-blob-attestation --key awskms://[ENDPOINT]/[ID/ALIAS/ARN] <blob>
 
-  # Verify a signature against Azure Key Vault
-  cosign verify-blob --key azurekms://[VAULT_NAME][VAULT_URI]/[KEY] --signature $sig <blob>
+  # Verify a blob attestation against Google Cloud KMS
+  cosign verify-blob-attestation --key gcpkms://projects/[PROJECT ID]/locations/[LOCATION]/keyRings/[KEYRING]/cryptoKeys/[KEY] <blob>
 
-  # Verify a signature against AWS KMS
-  cosign verify-blob --key awskms://[ENDPOINT]/[ID/ALIAS/ARN] --signature $sig <blob>
+  # Verify a blob attestation against Hashicorp Vault
+  cosign verify-blob-attestation --key hashivault://[KEY] <blob>
 
-  # Verify a signature against Google Cloud KMS
-  cosign verify-blob --key gcpkms://projects/[PROJECT ID]/locations/[LOCATION]/keyRings/[KEYRING]/cryptoKeys/[KEY] --signature $sig <blob>
+  # Verify a blob attestation against GitLab with project name
+  cosign verify-blob-attestation --key gitlab://[OWNER]/[PROJECT_NAME] <blob>
 
-  # Verify a signature against Hashicorp Vault
-  cosign verify-blob --key hashivault://[KEY] --signature $sig <blob>
+  # Verify a blob attestation against GitLab with project id
+  cosign verify-blob-attestation --key gitlab://[PROJECT_ID] <blob>
 
-  # Verify a signature against GitLab with project name
-  cosign verify-blob --key gitlab://[OWNER]/[PROJECT_NAME]  --signature $sig <blob>
+  # Verify a blob attestation against a certificate
+  cosign verify-blob-attestation --cert <cert> <blob>
 
-  # Verify a signature against GitLab with project id
-  cosign verify-blob --key gitlab://[PROJECT_ID]  --signature $sig <blob>
+  # verify a blob attestation with public key and validate attestation based on Rego policy
+  cosign verify-blob-attestation --key cosign.pub --type <PREDICATE_TYPE> --policy <REGO_POLICY> <blob>
 
-  # Verify a signature against a certificate
-  cosign verify-blob --cert <cert> --signature $sig <blob>
+  # verify a blob attestation with public key and validate attestation based on CUE policy
+  cosign verify-blob-attestation --key cosign.pub --type <PREDICATE_TYPE> --policy <CUE_POLICY> <blob>
+
 `,
 
 		Args: cobra.ExactArgs(1),
@@ -326,8 +327,8 @@ func VerifyBlobAttestation() *cobra.Command {
 				BundlePath: o.BundlePath,
 			}
 			if err := verify.VerifyBlobAttestationCmd(cmd.Context(), ko, o.CertVerify.Cert,
-				o.CertVerify.CertEmail, o.CertVerify.CertOidcIssuer, o.CertVerify.CertChain, o.Signature,
-				args[0], o.CertVerify.EnforceSCT); err != nil {
+				o.CertVerify.CertEmail, o.CertVerify.CertOidcIssuer, o.CertVerify.CertChain,
+				args[0], o.Predicate.Type, o.CertVerify.EnforceSCT, o.Policies); err != nil {
 				return errors.Wrapf(err, "verifying blob %s", args)
 			}
 			return nil

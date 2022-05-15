@@ -113,7 +113,8 @@ func TestFailures(t *testing.T) {
 		if predicateType == "" {
 			predicateType = "custom"
 		}
-		_, err = AttestationToPayloadJSON(context.TODO(), predicateType, att)
+
+		_, err = AttestationToPayloadJSON(context.TODO(), predicateType, att, nil)
 		checkFailure(t, tc.wantErrSubstring, err)
 	}
 }
@@ -124,7 +125,8 @@ func TestFailures(t *testing.T) {
 // constructing different attestations there.
 func TestErroringPayload(t *testing.T) {
 	// Payload() call fails
-	_, err := AttestationToPayloadJSON(context.TODO(), "custom", &failingAttestation{})
+
+	_, err := AttestationToPayloadJSON(context.TODO(), "custom", &failingAttestation{}, nil)
 	checkFailure(t, "inducing test failure", err)
 }
 func TestAttestationToPayloadJson(t *testing.T) {
@@ -136,7 +138,8 @@ func TestAttestationToPayloadJson(t *testing.T) {
 		if err != nil {
 			t.Fatal("Failed to create static.NewSignature: ", err)
 		}
-		jsonBytes, err := AttestationToPayloadJSON(context.TODO(), fileName, ociSig)
+
+		jsonBytes, err := AttestationToPayloadJSON(context.TODO(), fileName, ociSig, nil)
 		if err != nil {
 			t.Fatalf("Failed to convert : %s", err)
 		}
